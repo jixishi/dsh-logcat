@@ -102,7 +102,38 @@ pnpm --dir "%USERPROFILE%\.dsh\profiles\web" add link:<this-directory>
 
 > Note: every method inserts the same `logcat` row into the profile tree — never use two of them at once, or the next boot fails on a duplicate plugin id.
 
-Dependency resolution: `ws` / `react` / `react-dom` / `@deepseek-ai/*` resolve through junctions in this directory's `node_modules` pointing at the host's actually-loaded packages (single instance). Re-point the junctions when the host upgrades its dependencies.
+Dependency resolution (three separate channels — do not conflate them):
+
+| Dependency | How it resolves |
+|---|---|
+| `ws` | Junction under this directory's `node_modules`, physically installed under `.pnpm` |
+| `react` / `react-dom` | Same (the browser half gets them from the host; single instance) |
+| `@deepseek-ai/dsh-tools` | **Must** be declared in `package.json` `peerDependencies`; the host resolves it |
+
+The last row is mandatory, not an optimisation. For a **linked** install (`link:`) DSH routes
+bare-package requests through `routeLinked` in `dsh-app-boot`: only when the *importer's own*
+`package.json` lists that name in `peerDependencies` does the host apply "peer interception"
+and hand the request to the installation-scope package. Otherwise it falls back to native
+Node resolution, which walks up from `lib/` and never reaches the host's `app.asar`, failing with:
+
+```
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepseek-ai/dsh-tools'
+imported from ...\dsh-logcat\lib\index.js
+```
+
+The whole plugin (both halves) then fails to activate and the GUI reports "启用失败".
+After the fix, declare it like this:
+
+```json
+"peerDependencies": {
+  "@deepseek-ai/dsh-tools": ">=0.2.0-rc.1 <0.3.0-0",
+  "react": "^18.2.0",
+  "react-dom": "^18.2.0"
+}
+```
+
+Keep the range aligned with the host's major line (currently `0.2.1-rc.5`). A wrong range is
+reported as *incompatible*, not *missing* — different cause, different fix.
 
 ## Limitations
 

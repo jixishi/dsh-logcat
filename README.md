@@ -144,8 +144,38 @@ dsh plugin --profile web add link:<本目录绝对路径>
 > 注意：以上方式都会在 profile 树中插入同一行 `logcat`，不要同时使用，否则下次
 > 启动会因重复插件 id 而失败。
 
-依赖解析：`ws` / `react` / `react-dom` / `@deepseek-ai/*` 通过本目录 `node_modules` 下的 junction 指向宿主
-实际加载的物理包（保证单例）。若宿主依赖升级，请同步更新 junction 目标。
+依赖解析（三条通道，别混淆）：
+
+| 依赖 | 解析方式 |
+|---|---|
+| `ws` | 本目录 `node_modules` 下的 junction，真实安装在 `.pnpm` 里 |
+| `react` / `react-dom` | 同上（浏览器端由宿主注入，单例） |
+| `@deepseek-ai/dsh-tools` | **必须**写进 `package.json` 的 `peerDependencies`，由宿主代解析 |
+
+最后一条是硬性要求，不是可选优化。DSH 对「链接安装」（`link:`）的插件按
+`dsh-app-boot` 的 `routeLinked` 规则路由裸包名请求：只有当导入方**自己的
+`package.json` 把这个名字列进 `peerDependencies`** 时，宿主才走「peer 拦截」把请求
+交给安装作用域的包；否则回落到 Node 原生解析，从 `W:\dsh-plugins\dsh-logcat\lib`
+一路向上都找不到宿主 `app.asar` 里的包，直接抛：
+
+```
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepseek-ai/dsh-tools'
+imported from W:\dsh-plugins\dsh-logcat\lib\index.js
+```
+
+症状是整个插件（宿主半身 + 浏览器半身）都不激活，GUI 提示「启用失败」。
+修复后 `peerDependencies` 形如：
+
+```json
+"peerDependencies": {
+  "@deepseek-ai/dsh-tools": ">=0.2.0-rc.1 <0.3.0-0",
+  "react": "^18.2.0",
+  "react-dom": "^18.2.0"
+}
+```
+
+版本区间要与宿主大版本对齐（当前宿主 `0.2.1-rc.5`）。区间写错时插件会被判
+「不兼容」而不是「找不到包」，两种报错原因不同、修法也不同。
 
 ## 限制
 

@@ -25,10 +25,23 @@ release tooling; it must never contain secret values.
 
 ```sh
 node --check lib/index.js lib/client.js
-node selfcheck.mjs          # 30 host tools registered
-node tmp-rendertest.cjs     # drawer renders without a white screen
-node tmp-native-test.cjs    # drawer is the default; native panel is opt-in
+node --import ./.tmp/register-stub.mjs selfcheck.mjs   # 30 host tools registered
 ```
+
+`@deepseek-ai/dsh-tools` lives inside the host's `app.asar`, which a bare Node process cannot
+read, so a plain `node selfcheck.mjs` fails to import. Always run it through the local stub
+loader in `.tmp/` (a verification aid only — never shipped).
+
+## Host dependencies (linked installs)
+
+- Any `@deepseek-ai/*` package the host half imports **must** be declared in `package.json`
+  `peerDependencies`, with a range matching the host's major line (currently `0.2.1-rc.5`).
+  For `link:` installs DSH only applies peer interception when the importer's own manifest
+  lists the name; otherwise the import dies with `ERR_MODULE_NOT_FOUND` and the whole plugin
+  (both halves) fails to activate. This is why `@deepseek-ai/dsh-tools` is a peer here.
+- `ws` / `react` / `react-dom` stay real installs under this directory's `node_modules`.
+- After changing the manifest, re-enable the plugin row (`plugin_manager` `set_plugin`) or
+  restart the host — an already-failed import is not retried by itself.
 
 ## UI
 
