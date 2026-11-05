@@ -11,3 +11,8 @@ tmp-*
 # build artifact: the dex itself is embedded as base64 in lib/injector-jar.js
 # (rebuild with tools/injector/build.mjs)
 lib/injector.jar
+
+# build artifact: the device MediaCodec encoder dex, embedded as base64 in
+# lib/encoder-jar.js (rebuild with tools/encoder/build.mjs)
+lib/encoder.jar
+
