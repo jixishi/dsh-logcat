@@ -90,15 +90,15 @@ DSH Web GUI 的安卓实机调试面板（类似 Android Studio 的 Logcat 视�
 
 ```bash
 # 方式一（推荐，npm 安装）：
-dsh plugin --profile web add @windypro-rourou/dsh-logcat
+dsh plugin --profile web add dsh-logcat
 
 # 更新到最新版（不会自动更新；装旧版时面板/agent 通告会提示有新版本）：
 dsh plugin --profile web update                # 升到当前 major 内最新
-# 或强制最新：dsh plugin --profile web add @windypro-rourou/dsh-logcat@latest
+# 或强制最新：dsh plugin --profile web add dsh-logcat@latest
 # 更新后重启 GUI（dsh web）生效
 
 # 尝鲜 preview 版（日常迭代高频更新，可能不稳定）：
-dsh plugin --profile web add @windypro-rourou/dsh-logcat@preview
+dsh plugin --profile web add dsh-logcat@preview
 ```
 
 ### 可选：GitHub Packages 通道（npm.pkg.github.com）
@@ -110,12 +110,12 @@ dsh plugin --profile web add @windypro-rourou/dsh-logcat@preview
 
 ```ini
 # ~/.npmrc
-@windypro-rourou:registry=https://npm.pkg.github.com
+
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
 ```bash
-dsh plugin --profile web add @windypro-rourou/dsh-logcat   # 走上面配置的源
+dsh plugin --profile web add dsh-logcat   # 走上面配置的源
 ```
 
 维护者发布（两个脚本都会**自动读取**凭据：有环境变量就用，没有就 dot-source 便携版加载器
@@ -140,7 +140,7 @@ pnpm --dir "%USERPROFILE%\.dsh\profiles\web" add link:F:\dsh-logcat
 #   然后在 profile 的 cordis.patch.yml 追加：
 #   - insert:
 #       - id: logcat
-#         name: '@windypro-rourou/dsh-logcat'
+#         name: 'dsh-logcat'
 # 该 patch 文件会被运行中的 GUI 热监听；若未生效，重启 GUI 即可。
 
 # 方式三（bundle 层，README 原始流程，适合全新 profile；与方式二互斥，勿混用）：

@@ -46,15 +46,15 @@ An Android real-device debugging workbench for the DSH Web GUI (an Android Studi
 
 ```bash
 # Recommended (npm install):
-dsh plugin --profile web add @windypro-rourou/dsh-logcat
+dsh plugin --profile web add dsh-logcat
 
 # Update to the latest (no auto-update; older installs show a version hint in the panel/agent prompt):
 dsh plugin --profile web update                # latest within the current major
-# or force: dsh plugin --profile web add @windypro-rourou/dsh-logcat@latest
+# or force: dsh plugin --profile web add dsh-logcat@latest
 # restart the GUI (dsh web) afterwards
 
 # Optional preview channel (frequent small iterations, may be unstable):
-dsh plugin --profile web add @windypro-rourou/dsh-logcat@preview
+dsh plugin --profile web add dsh-logcat@preview
 ```
 
 ### Optional: GitHub Packages registry (npm.pkg.github.com)
@@ -66,12 +66,12 @@ The same package is mirrored to GitHub Packages for environments that only want 
 
 ```ini
 # ~/.npmrc
-@windypro-rourou:registry=https://npm.pkg.github.com
+
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
 ```bash
-dsh plugin --profile web add @windypro-rourou/dsh-logcat   # resolves through the registry above
+dsh plugin --profile web add dsh-logcat   # resolves through the registry above
 ```
 
 Maintainer publish (both scripts **auto-load credentials**: they use the environment when present,
@@ -96,7 +96,7 @@ pnpm --dir "%USERPROFILE%\.dsh\profiles\web" add link:<this-directory>
 # then add to ~/.dsh/profiles/web/cordis.patch.yml:
 #   - insert:
 #       - id: logcat
-#         name: '@windypro-rourou/dsh-logcat'
+#         name: 'dsh-logcat'
 # The patch file is hot-watched by a running GUI; restart it if it does not take effect.
 ```
 
