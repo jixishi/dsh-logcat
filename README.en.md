@@ -1,128 +1,241 @@
 # dsh-logcat
 
-An Android real-device debugging workbench for the DSH Web GUI (an Android Studio-style Logcat view).
+[![Cordis](https://img.shields.io/badge/Cordis-Plugin-blue.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![scrcpy](https://img.shields.io/badge/scrcpy-server-v3.3.1-green.svg)](https://github.com/Genymobile/scrcpy)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.9.1-blue.svg)]()
 
-[中文](README.md) | **English**
+`dsh-logcat` is an **on-device Android debugging and reverse-engineering workbench** built
+for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web GUI.
 
-## Features
+It gives you live logcat, real-device screen casting with desktop control, on-device file
+browsing, and a process/memory reverse-engineering workbench — and exposes the same
+capabilities to the model as **30 agent tools**, so an agent can deploy an APK, watch the
+log, catch crashes and drive the UI itself.
 
-- **Auto-connect**: probes adb on this machine (`ANDROID_HOME` / `ANDROID_SDK_ROOT` / default `%LOCALAPPDATA%\Android\Sdk` / PATH /
-  `~/.dsh/adb`), polls `adb devices -l` every 2s; devices in debug mode get a logcat stream **attached automatically** (`-v threadtime`) — no need to open the panel first.
-- **One-click adb install**: when adb is missing, the panel's status bar shows a "One-click install adb" button — it downloads platform-tools from the USTC mirror (Google official fallback), unpacks them to `~/.dsh/adb` and connects automatically (~10MB).
-- **Live logs**: WebSocket push, 2000-line ring buffer per device; automatic reconnect with exponential backoff.
-- **Logcat panel** (sidebar "Logcat" entry, right-side drawer, **draggable width that is remembered**):
-  - Device dropdown (model / serial / state, remembers the last selection)
-  - Severity filter (V/D/I/W/E/F single-select, Android Studio colors)
-  - Keyword filter (**space-separated keywords = any-match**) and a **test package input** (Enter to set; synced with the agent's `logcat_set_package`; shown live in the status bar)
-  - **Screenshot button**: one-click device screen capture and PNG download (`exec-out screencap`)
-  - **Crash highlighting**: FATAL EXCEPTION / ANR lines highlighted in red
-  - **History button**: loads on-disk persisted logs (survives GUI restarts; merged with the live buffer and deduped by timestamp)
-  - **Crash auto-snapshots**: on a FATAL EXCEPTION / ANR in the stream, a screenshot + log context are saved to `~/.dsh/logcat/crashes`; the panel shows a banner and you can inspect the screenshot/log in the "Crash" dialog
-  - **Events view**: one-click live `logcat -b events` stream (app start/crash/lifecycle events)
-  - **WiFi wireless debugging wizard**: IP/port/pairing-code in, `adb pair` + `adb connect` out — ditch the cable (Android 11+)
-  - **Install APK button**: local file picker installs an APK to the current device (streamed upload, 1GB cap)
-  - **Quick device keys**: Home / Back / Recents / Wake / Power / Volume ± with one click
-  - **Performance sparklines**: CPU / memory / battery sampled every 2s with trend charts in the status bar
-  - **Live screen casting + desktop control**: the "Screen" tab streams the device display as **H.264 video (WebCodecs hardware decode, measured 55-60fps)** with resolution tiers **derived from the device panel** (native / 75% / 50% / 37.5% / 25%, bitrate scaled by pixel count) and two modes (smooth video / sharp PNG). It **follows device rotation** (a landscape device automatically streams 1200x540 — a full frame with no letterbox — and touch coordinates are remapped to the current orientation), and gestures are injected with **2-3ms** latency through scrcpy's control channel (one write on a long-lived socket); without an active stream it falls back to the stock `input` command, which boots a Java VM per call (~730ms). **Control the phone from your computer**: click = tap, drag = swipe, **wheel = scroll**, **right-click = BACK**, **long-press**, **double-click**, **type on your physical keyboard** (letters/digits/symbols go straight through; Enter/Backspace/Esc/arrows/Tab map to keys), a text box for IME (Chinese) input, quick keys (Home/Back/Wake/Volume), one-click frame download and a ⛶ fullscreen toggle.
-  - **Reverse-engineering workbench** (Log / Screen / RE tabs): process list → **auto-loaded module map** (library / base / perms, click a base to dump it) → memory hex/string search → dump hits → **manual address + length dump**, with a **hex + ASCII** view.
-  - Pause/resume (pause buffers new lines, resume replays them), clear, copy, export .txt
-  - Windowed rendering + auto-scroll (pauses while you scroll up manually)
-  - Unauthorized-device hint ("allow USB debugging on the phone")
-- **Agent tools** (30 in total, all exposed to the agent and announced in its system prompt):
-  - Device: `logcat_devices` (list devices), `device_info` (model/version/SDK/resolution/memory/battery), `device_stats` (CPU/memory/battery samples), `app_info` (installed version name / versionCode / APK path)
-  - Screen / multimodal: `screen_capture` (screenshot saved locally + embedded as an image block so a multimodal model can see it and fix bugs with `input_*`)
-  - Execution: `adb_exec` (shell), `adb_install` (install a local APK), `adb_pull` (pull files), `app_launch` (start an app / specific Activity), `app_stop` (force-stop; destructive — confirm first)
-  - Input: `input_tap` / `input_swipe` / `input_text` / `input_keyevent` (real-device UI automation), `ui_dump` (UI hierarchy XML), `activity_current` (current foreground Activity)
-  - Logs: `logcat_recent` (filter by package/severity/keyword), `logcat_history` (disk history backfill), `logcat_crash` (crash/ANR blocks with context), `logcat_events` (events buffer), `crash_sessions` (crash snapshot history), `logcat_set_package` (lock the package under test)
-  - Reverse engineering / memory: `proc_list` (process list), `proc_maps` (memory maps + module bases), `proc_status` (process state / memory summary), `proc_smaps` (top Pss regions), `mem_dump` (read memory at an address as hex), `mem_search` (search memory for hex/string patterns), `frida_server` (deploy/start/stop frida-server), `frida_script` (generate hook/trace/scan/bypass/dump script templates)
-- **Real-device debugging workflow**: while building an Android app, the agent's announcement dynamically lists connected devices (serial + model) and the current test package. After confirming with the user: `adb_install` to deploy → `adb_exec`/`app_launch` to start → `logcat_set_package` to lock → `logcat_recent` / `logcat_crash` for crashes → `ui_dump` + `input_*` for UI automation → `adb_pull` for artifacts. A closed loop on real hardware.
-- **Reverse-engineering workflow**: `proc_list` to find the process → `proc_maps` for module bases → `mem_dump` at a target address / `mem_search` for signatures → `proc_smaps` for memory detail → `frida_script` + `frida_server` for dynamic instrumentation. Reading another app's memory/maps needs root or a debuggable app (run-as); tools return clear errors otherwise.
-- **Panel form (DSH 0.2)**: the **right-hand drawer stays the default** — it overlays the conversation, so glancing at logs costs no layout switch and no screen space. For a persistent panel, set `window.__DSH_LOGCAT_NATIVE_PANEL__ = true` in the browser console and reload; the official `main` (central panel) + `sidebar.panellist` (sidebar row) seats are then used instead. `dsh.client.inject` is aligned with the 0.2 manifest; icons are a bundled SVG set (no icon dependency) and colours prefer the host's `--dsw-*` design tokens.
-- **Extra routes**: `POST /api/dsh-logcat/exec` (shell), `POST /api/dsh-logcat/package` (set package), `GET /api/dsh-logcat/screenshot`, `POST /api/dsh-logcat/install-adb`, `GET /api/dsh-logcat/history`, `GET /api/dsh-logcat/crashes` + `GET /api/dsh-logcat/crash-file`, `POST /api/dsh-logcat/install-apk`, `POST /api/dsh-logcat/keyevent`, `POST /api/dsh-logcat/wifi-connect` / `wifi-disconnect`, `GET /api/dsh-logcat/processes`, `POST /api/dsh-logcat/mem-search`, `GET /api/dsh-logcat/mem-dump`.
-- **On-disk data (bounded)**: logs are written per device per day to `~/.dsh/logcat/logs/<serial>/logcat-MM-DD.log` (raw threadtime lines); a day past its cap rolls into `.001/.002…` parts, and the oldest files are pruned by retention window and per-device total cap. Defaults: 64 MB/part, 14-day retention, 512 MB/device — override with `DSH_LOGCAT_DAY_MB`, `DSH_LOGCAT_RETAIN_DAYS`, `DSH_LOGCAT_MAX_MB`, or disable persistence entirely with `DSH_LOGCAT_PERSIST=off` (the live stream, `logcat_recent` and `logcat_crash` keep working). Crash snapshots live in `~/.dsh/logcat/crashes/<serial>/<timestamp>-<FATAL|ANR>/` (`screenshot.png` + `crash.log` + `meta.json`).
-- **Input injection**: `tap/swipe/keyevent` go through the scrcpy control channel (a few ms per gesture) while a stream runs, and fall back to the stock `input` command otherwise. The bundled `app_process` injector was removed: Android 15 kills it at startup, and the control channel covers the same need.
+> **Current version: 0.9.1.** This release rebuilds the status strip into **six metric
+> cards** (device / CPU / MEM / disk / network / battery), adds **disk usage** and **live
+> network throughput**, and fixes a blank-panel render crash, a shifted network counter
+> parse, and misaligned card titles.
+>
+> **Compatibility**: targets DSH **0.2.1-rc.5**, Node.js ≥ 22.19.
+> Uses the DSH 0.2 `sidebar.panellist` / `main` panel seats and the
+> `window.__ModuleLoader__.load({id, factory})` client bundle format.
 
-## Installation
+## 🆕 0.9.1 highlights
 
-```bash
-# Recommended (npm install):
-dsh plugin --profile web add dsh-logcat
+- **Six metric cards**: the strip is now a responsive card grid — device / CPU / MEM /
+  disk / network / battery — one row wide, collapsing to 3 / 2 / 1 columns by **container
+  query on the panel's own width** (not the viewport's).
+- **Disk usage**: `stat -f -c '%S %b %a' /data` (block size, total blocks, free blocks).
+  `df /data` on this device resolves to an `/apex` mount, not the data partition.
+- **Live network throughput**: reads the default-route interface (`wlan0` on Wi-Fi,
+  `rmnet_*` on cellular) from `/proc/net/dev`; the client diffs successive samples every
+  2 s. Headline is the combined rate, the detail line splits `↓x/s ↑y/s`.
+- **Blank panel fixed**: `Spark()` called `Math.random()` during render to build an SVG
+  gradient id. That side effect took the whole React tree down — the sidebar entry stayed,
+  but clicking it opened nothing. Replaced with a flat area fill; no per-render id.
+- **Network value fixed**: `/proc/net/dev` pads counters with spaces *after* the interface
+  name, and `tr -s ' ' | cut -d' ' -f2,10` read the interface name as the rx counter, shifting
+  every field. It also summed dormant interfaces with non-resetting counters. Now reads the
+  default-route interface only.
+- **Alignment and stray separator**: card titles share one top edge; the device tile shows
+  model / Android version / resolution on three separate lines (the `·` separator used to
+  strand at the end of a wrapped line as a lone dot).
+- **Bundled input injector removed**: Android 15 kills it at startup (executable dex under
+  `app_process` is restricted). The scrcpy control channel covers the same need.
 
-# Update to the latest (no auto-update; older installs show a version hint in the panel/agent prompt):
-dsh plugin --profile web update                # latest within the current major
-# or force: dsh plugin --profile web add dsh-logcat@latest
-# restart the GUI (dsh web) afterwards
+---
 
-# Optional preview channel (frequent small iterations, may be unstable):
-dsh plugin --profile web add dsh-logcat@preview
+## 🌟 Features
+
+- 📡 **Auto-connect and self-installing adb**: probes `ANDROID_HOME` / `ANDROID_SDK_ROOT` /
+  the default SDK path / `PATH` / `~/.dsh/adb`, polls `adb devices -l` every 2 s, and attaches
+  the logcat stream of any debuggable device automatically. When adb is missing the status
+  bar offers a one-click install (USTC mirror, Google fallback).
+- 📊 **Six metrics, sampled every 2 s**:
+  - **Device**: model / Android version / resolution
+  - **CPU**: normalised from `top`'s aggregate line (`800%cpu … 625%idle` on an 8-core
+    phone), with a sparkline
+  - **MEM**: `/proc/meminfo` used / total / percent, highlighted above 85%
+  - **Disk**: `/data` usage and percentage, highlighted above 90%
+  - **Network**: default-route interface throughput with a trend line
+  - **Battery**: level and charging state
+- 📜 **Live log stream**: WebSocket push with a 2000-line ring buffer per device and
+  exponential-backoff reconnect. Level filter (V/D/I/W/E/F, Android Studio colours),
+  space-separated multi-keyword filter (any hit), a **test package** field shared with the
+  agent tools, and red highlighting for fatal/ANR lines.
+- 🖼️ **Screen casting and desktop control** (`屏幕` tab):
+  - **H.264 via WebCodecs hardware decode**, encoded on the device by the **official
+    scrcpy-server v3.3.1**, which is **vendored with the plugin** — no local scrcpy install.
+  - The server owns its `MediaCodec`, so there is **no 180-second `screenrecord` cap and no
+    reconnect every 3 minutes**; static scenes hold with `KEY_REPEAT_PREVIOUS_FRAME_AFTER`
+    instead of starving the encoder.
+  - **Resolution tiers derived from the device panel** (native / 75% / 50% / 37.5% / 25%,
+    bitrate scaled by pixel count), with smooth (video) and sharp (PNG) modes.
+  - **Follows rotation**: a landscape device streams WxH-swapped, full frame, no letterbox,
+    with touch coordinates remapped to the current orientation.
+  - **Low-latency input** through scrcpy's **control channel**
+    (`InputManager.injectInputEvent`, one write on a long-lived socket): measured **2–3 ms**
+    per tap. Without an active stream it falls back to `adb shell input` (a Java VM boot per
+    call, ~730 ms).
+  - **Controls**: click = tap, drag = swipe, **wheel = scroll**, **right-click = BACK**,
+    long-press, double-click, **physical keyboard passthrough** (Enter/Backspace/Esc/arrows/
+    Tab mapped), an IME text box for Chinese, quick keys (Home/Back/Recents/Wake/Power/
+    Volume), one-click frame download, and fullscreen.
+- 📂 **On-device file browser** (`文件` tab): walk directories and **climb back to `/`**
+  (`/data/local/tmp` is a starting point, not a fence). A **permissions column is always
+  visible**; each row reveals **download** (streamed, ≤256 MB) and **delete** (with a
+  confirmation and a refusal to delete `/` or top-level directories) on hover. Symlinks show
+  their target; path jump bar, bookmark chips, live filename filter and multi-select.
+- 🔬 **Reverse-engineering workbench** (`逆向` tab): process list → **module map**
+  (so name / base / permissions, click a base to dump) → hex or string memory search →
+  dump at a match → manual address + length dump, with a **hex + ASCII** two-column view.
+  Backed by the `frida_server` and `frida_script` tools.
+- 💥 **Crash snapshots**: a `FATAL EXCEPTION` or `ANR` in the stream triggers an automatic
+  screenshot plus 150 context lines under
+  `~/.dsh/logcat/crashes/<serial>/<timestamp>-<FATAL|ANR>/` (`screenshot.png`, `crash.log`,
+  `meta.json`); the panel shows a banner and keeps the history browsable.
+- 🕘 **History**: logs roll to disk per device per day, so a GUI restart loses nothing; the
+  panel merges the disk tail with the live buffer, de-duplicated by timestamp.
+- 📶 **Wireless debugging**: IP / port / pairing code drives `adb pair` + `adb connect`
+  (Android 11+).
+- 📦 **APK install, screenshots, export**: stream-installs a local APK (1 GB cap),
+  captures the screen to PNG, and pause/resume/clear/copy/export the log view.
+- 🧩 **Panel shape**: a **right-hand drawer** by default (overlays the conversation, so a
+  glance costs no layout switch), **resizable and remembered**. For a persistent panel, run
+  `window.__DSH_LOGCAT_NATIVE_PANEL__ = true` in the console and reload to mount through the
+  official `main` + `sidebar.panellist` seats.
+- 🎨 **Design language**: host `--dsw-*` tokens first, a single accent colour, bundled SVG
+  icons (no icon pack, no emoji), monospace + `tabular-nums` log rows.
+- 🗄️ **Bounded persistence**: 64 MB per part, 14-day retention, 512 MB per device by
+  default — override with `DSH_LOGCAT_DAY_MB`, `DSH_LOGCAT_RETAIN_DAYS`,
+  `DSH_LOGCAT_MAX_MB`, or disable entirely with `DSH_LOGCAT_PERSIST=off` (the stream and the
+  agent tools keep working).
+
+---
+
+## 📸 Showcase
+
+| 1. Live log stream (level / keyword / package) | 2. Casting and control (portrait) |
+| :---: | :---: |
+| <img src="docs/images/log-stream.png" width="420" alt="Live log stream" /> | <img src="docs/images/screen-portrait.png" width="420" alt="Portrait casting" /> |
+| **Six metric cards, monospace rows, crash highlighting** | **H.264 hardware decode at native 1440x3168** |
+
+| 3. Rotation follows automatically (landscape) | 4. On-device file browser |
+| :---: | :---: |
+| <img src="docs/images/screen-landscape.png" width="420" alt="Landscape casting" /> | <img src="docs/images/file-browser.png" width="420" alt="File browser" /> |
+| **Stream swaps to 3168x1440, full frame, no letterbox** | **Permissions column, breadcrumbs, download/delete, multi-select** |
+
+| 5. Narrow panel collapses responsively |
+| :---: |
+| <img src="docs/images/narrow-panel.png" width="300" alt="Narrow panel" /> |
+| **Container query folds to two columns, title baselines still aligned** |
+
+---
+
+## 📋 Architecture
+
+```
+Android device (adb over USB or Wi-Fi)
+  │
+  ├─ logcat subprocess ─────────▶ AdbEngine (lib/index.js)
+  │    (-v threadtime)              │  2000-line ring buffer per device
+  │                                 │  daily files + volume roll + retention
+  ├─ scrcpy-server (v3.3.1) ───────┤
+  │    ├─ video socket  → H.264     │  ScrcpyVideoFramer (12-byte frame header)
+  │    └─ control socket ← input    │  ScrcpyController (touch / keycode)
+  │                                 │
+  ├─ adb shell (stats/files/RE) ────┤  collectStats (all metrics in one round-trip)
+  │                                 │  listRemoteDir (ls -la → permissions/size/time)
+  │                                 ▼
+  │                         HTTP routes /api/dsh-logcat/*
+  │                         WebSocket /api/dsh-logcat/stream
+  │                                 │
+  │                                 ▼
+  │                         DSH Web GUI
+  │                           └─ lib/client.js (React, no build step)
+  │                                 sidebar entry + right-hand drawer
+  │                                 tabs: log / screen / RE / files
+  │                                 six metric cards (container-query responsive)
+  │
+  └─ ctx.tools ──▶ 30 agent tools (logcat_* / adb_* / input_* / proc_* / mem_* / frida_*)
 ```
 
-### Optional: GitHub Packages registry (npm.pkg.github.com)
+---
 
-The same package is mirrored to GitHub Packages for environments that only want GitHub credentials. Two caveats:
+## 🚀 Installation
 
-- **Installing always requires auth**: the GitHub Packages npm registry wants a token (`read:packages`) even for public packages.
-- **Only the `latest` dist-tag exists there**; the `preview` channel is npmjs.org-only.
+This is a standard DSH bundle package declaring `dsh.bundle.patch` and `dsh.client`, so the
+official CLI installs and mounts it in one line.
+
+### 1. From npm (recommended)
+
+```bash
+dsh plugin --profile web add dsh-logcat
+```
+
+Updating (it does not self-update; the panel and agent notice report a newer version):
+
+```bash
+dsh plugin --profile web update          # latest within the current major
+# or pin the newest: dsh plugin --profile web add dsh-logcat@latest
+```
+
+> Restart the GUI (`dsh web`) after updating.
+>
+> **Uninstall**: `dsh plugin --profile web remove dsh-logcat`
+
+### 2. Link a local checkout (development, hot)
+
+```powershell
+dsh plugin --profile web add link:<absolute path to this directory>
+```
+
+### 3. Optional: GitHub Packages mirror
+
+The same package is mirrored to GitHub Packages for environments that only hold GitHub
+credentials. Two caveats:
+
+- **Install requires auth**: the GitHub Packages npm registry needs a token
+  (`read:packages`) even for public packages.
+- **Only the `latest` dist-tag** exists there.
 
 ```ini
 # ~/.npmrc
-
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
-```bash
-dsh plugin --profile web add dsh-logcat   # resolves through the registry above
-```
-
-Maintainer publish (both scripts **auto-load credentials**: they use the environment when present,
-otherwise they dot-source the portable loader `$env:DSH_HOME\env\load-secrets.ps1`; credentials only
-live in the process environment and are never written to disk):
+Maintainer publishing (both scripts read credentials automatically — from the environment
+when present, otherwise by dot-sourcing the portable loader
+`$env:DSH_HOME\env\load-secrets.ps1`; secrets only ever enter the process environment):
 
 ```powershell
 ./publish-npm.ps1                 # → npmjs.org (primary, needs NPM_TOKEN)
-./publish-github-packages.ps1     # → GitHub Packages (needs GH_TOKEN with write:packages)
+./publish-github-packages.ps1     # → GitHub Packages (needs GH_TOKEN: write:packages)
 ```
 
-## Release policy (main / latest first)
+---
 
-- **`main` branch + npm `latest` tag**: stable releases — the main update channel. Features ship to main/latest as soon as a batch is ready.
-- **`preview` branch + npm `preview` tag**: optional early-access channel (frequent small iterations). If there are no experimental features since the last stable release, the preview tag simply stays at an older preview version — ignore it.
-- The version self-check notifies per channel only (stable users see `latest`, preview users see `preview`; no cross-talk).
-
-For development you can also link the source directly into the web profile and append the patch row in `~/.dsh/profiles/web/cordis.patch.yml`:
-
-```bash
-pnpm --dir "%USERPROFILE%\.dsh\profiles\web" add link:<this-directory>
-# then add to ~/.dsh/profiles/web/cordis.patch.yml:
-#   - insert:
-#       - id: logcat
-#         name: 'dsh-logcat'
-# The patch file is hot-watched by a running GUI; restart it if it does not take effect.
-```
-
-> Note: every method inserts the same `logcat` row into the profile tree — never use two of them at once, or the next boot fails on a duplicate plugin id.
-
-Dependency resolution (three separate channels — do not conflate them):
+## ⚙️ Dependency resolution (three channels)
 
 | Dependency | How it resolves |
 |---|---|
-| `ws` | Junction under this directory's `node_modules`, physically installed under `.pnpm` |
-| `react` / `react-dom` | Same (the browser half gets them from the host; single instance) |
-| `@deepseek-ai/dsh-tools` | **Must** be declared in `package.json` `peerDependencies`; the host resolves it |
+| `ws` | junction in this directory's `node_modules`, installed under `.pnpm` |
+| `react` / `react-dom` | same (the host injects them on the browser side, as singletons) |
+| `@deepseek-ai/dsh-tools` | **must** be declared in `package.json` `peerDependencies`, resolved by the host |
 
-The last row is mandatory, not an optimisation. For a **linked** install (`link:`) DSH routes
-bare-package requests through `routeLinked` in `dsh-app-boot`: only when the *importer's own*
-`package.json` lists that name in `peerDependencies` does the host apply "peer interception"
-and hand the request to the installation-scope package. Otherwise it falls back to native
-Node resolution, which walks up from `lib/` and never reaches the host's `app.asar`, failing with:
+The last one is mandatory. For a `link:` install, DSH routes bare specifiers through
+`dsh-app-boot`'s `routeLinked`: the host only applies peer interception when the importer's
+**own `package.json` lists the name in `peerDependencies`**. Otherwise native Node resolution
+takes over, finds nothing on the way up from `lib/` to the host's `app.asar`, and throws:
 
 ```
 Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepseek-ai/dsh-tools'
-imported from ...\dsh-logcat\lib\index.js
+imported from .../lib/index.js
 ```
 
-The whole plugin (both halves) then fails to activate and the GUI reports "启用失败".
-After the fix, declare it like this:
+The symptom is that **neither half activates** and the GUI reports a failed enable.
 
 ```json
 "peerDependencies": {
@@ -132,17 +245,185 @@ After the fix, declare it like this:
 }
 ```
 
-Keep the range aligned with the host's major line (currently `0.2.1-rc.5`). A wrong range is
-reported as *incompatible*, not *missing* — different cause, different fix.
+> Keep the range aligned with the host's major line. A wrong range fails as
+> "incompatible"; a missing one fails as "package not found" — different causes, different fixes.
 
-## Limitations
+---
 
-- The device must have USB debugging enabled and be authorized on this machine (`unauthorized` state is surfaced).
-- logcat output may contain sensitive information; `/api/dsh-logcat/*` routes are loopback-only.
-- `adb shell` commands consume real device resources — confirm before running destructive ones.
+## 🤖 Agent tools (30)
 
-## Files
+All exposed to the model and advertised in the system prompt.
 
-- `lib/index.js` — host half: adb engine, polling, logcat child processes, routes, WebSocket, agent tools.
-- `lib/client.js` — browser half: sidebar entry + Logcat panel (React, no build step).
-- `cordis.patch.yml` — profile bundle patch (applied automatically).
+### Device and execution
+
+| Tool | Description |
+| :--- | :--- |
+| `logcat_devices` | list attached devices (serial / model / state) |
+| `device_info` | model / brand / version / SDK / resolution / ABI / memory / battery |
+| `device_stats` | one-shot CPU / memory / battery sample |
+| `app_info` | installed version name / versionCode / APK path |
+| `adb_exec` | run an arbitrary adb shell command |
+| `adb_install` | install a local APK on the device |
+| `adb_pull` | copy a file off the device |
+| `app_launch` / `app_stop` | start an app (optionally an Activity) / force-stop (destructive; confirm first) |
+
+### Logs
+
+| Tool | Description |
+| :--- | :--- |
+| `logcat_recent` | live log filtered by package / level / keyword |
+| `logcat_history` | on-disk history (survives restarts) |
+| `logcat_crash` | crash / ANR blocks with context |
+| `logcat_events` | events buffer (app start / crash / lifecycle) |
+| `crash_sessions` | auto-captured crash snapshots |
+| `logcat_set_package` | pin the package under test (shared with the panel) |
+
+### Screen and input
+
+| Tool | Description |
+| :--- | :--- |
+| `screen_capture` | screenshot saved to disk **and attached to the conversation** for multimodal inspection |
+| `input_tap` / `input_swipe` / `input_text` / `input_keyevent` | on-device UI automation |
+| `ui_dump` | UI hierarchy XML (pair with `input_*`) |
+| `activity_current` | current foreground Activity |
+
+### Reverse engineering and memory
+
+| Tool | Description |
+| :--- | :--- |
+| `proc_list` | process list (pid / ppid / user / name) |
+| `proc_maps` | memory map with so module bases |
+| `proc_status` | process state / memory summary |
+| `proc_smaps` | smaps detail (top regions by Pss) |
+| `mem_dump` | read memory at an address as hex |
+| `mem_search` | search memory for a hex pattern or string |
+| `frida_server` | deploy / start / stop frida-server |
+| `frida_script` | generate hook / trace / scan / bypass / dump script templates |
+
+> Reading another app's memory or maps needs root or a debuggable app (`run-as`); the tools
+> say so explicitly.
+
+### Typical workflows
+
+**Debug loop**: `adb_install` → `app_launch` → `logcat_set_package` → `logcat_recent` /
+`logcat_crash` → `ui_dump` + `input_*` → `adb_pull` for evidence.
+
+**Reverse engineering**: `proc_list` → `proc_maps` for module bases → `mem_dump` /
+`mem_search` → `proc_smaps` for the memory profile → `frida_script` + `frida_server` to
+instrument.
+
+---
+
+## 🔌 HTTP routes
+
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/dsh-logcat/status` | devices, version, streaming state, metric snapshot |
+| `GET` | `/api/dsh-logcat/stats` | the six metrics (device / CPU / MEM / disk / network / battery) |
+| `GET` | `/api/dsh-logcat/video-tiers` | resolution tiers derived from the device panel |
+| `POST` | `/api/dsh-logcat/exec` | run shell (prefers the scrcpy control channel) |
+| `POST` | `/api/dsh-logcat/keyevent` | send a key |
+| `POST` | `/api/dsh-logcat/package` | set the package under test |
+| `GET` | `/api/dsh-logcat/screenshot` | capture the screen |
+| `GET` | `/api/dsh-logcat/history` | on-disk log history |
+| `GET` | `/api/dsh-logcat/crashes` · `/crash-file` | crash snapshot list / read |
+| `POST` | `/api/dsh-logcat/install-apk` | upload and install an APK |
+| `POST` | `/api/dsh-logcat/install-adb` | install adb |
+| `POST` | `/api/dsh-logcat/wifi-connect` · `/wifi-disconnect` | wireless debugging |
+| `GET` | `/api/dsh-logcat/files` | list a device directory (with permissions) |
+| `GET` | `/api/dsh-logcat/file-get` | download a file (streamed, ≤256 MB) |
+| `POST` | `/api/dsh-logcat/file-rm` | delete a file or directory |
+| `GET` | `/api/dsh-logcat/root-probe` | detect whether the device has `su` |
+| `GET` | `/api/dsh-logcat/processes` | process list |
+| `POST` | `/api/dsh-logcat/mem-search` · `GET` `/mem-dump` | memory search / dump |
+
+> Every `/api/dsh-logcat/*` route is **loopback-only**.
+
+---
+
+## 🧪 Verification
+
+```bash
+# syntax
+node --check lib/index.js
+node --check lib/client.js
+
+# host tool registration (30 tools)
+node --import ./.tmp/register-stub.mjs selfcheck.mjs
+```
+
+`@deepseek-ai/dsh-tools` lives inside the host's `app.asar`, which a bare Node process
+cannot read, so `node selfcheck.mjs` fails to import on its own — always run it through the
+local stub loader (a verification aid, never shipped).
+
+Development-time regression checks (not shipped):
+
+```bash
+node .tmp/check-spark-render.mjs      # Spark rendering / variable shadowing
+node .tmp/check-stats-parse.mjs       # metric parsing, asserted against real device output
+```
+
+---
+
+## ❓ Troubleshooting
+
+1. **The GUI reports `Cannot find package '@deepseek-ai/dsh-tools'`.**
+   - The package is missing from `package.json` `peerDependencies`. See the dependency
+     section above. After fixing, **re-enable the plugin row** or restart the host — a failed
+     import is not retried by itself.
+
+2. **The sidebar has a Logcat entry but clicking it shows nothing.**
+   - A client-side render error unmounted the whole tree. 0.9.1 fixed `Spark()` calling
+     `Math.random()` during render. If it still happens, open devtools and read the first
+     console error.
+
+3. **Black screen, or very low frame rate.**
+   - Make sure the device is unlocked (some devices render nothing while locked). Static
+     scenes deliberately drop frames (the encoder holds with
+     `KEY_REPEAT_PREVIOUS_FRAME_AFTER`); that is by design.
+   - If the tier is too high for the encoder, step down one level (e.g. 50%).
+
+4. **Taps do nothing, or are very slow.**
+   - Input prefers the scrcpy control channel, which **requires an active stream**. Without
+     one it falls back to `adb shell input` (a JVM boot per call, ~730 ms) — expected, not a bug.
+
+5. **The network card shows 0, or a small number.**
+   - It diffs the default-route interface's counters, so an idle device really is near zero.
+     Phones' own status-bar readouts use a different sampling instant and scope, so the two
+     will never match byte for byte.
+
+6. **The status bar says "no su" and root stays disabled.**
+   - This device has no `su`. File browsing still works inside what the `shell` user can read;
+     reading another app's memory needs a debuggable app (`run-as`).
+
+7. **The device shows as `unauthorized` in `adb devices`.**
+   - Tap "Allow USB debugging" on the phone; the panel says so explicitly.
+
+---
+
+## ⚠️ Limitations
+
+- The device must have USB debugging on and this machine authorised.
+- Logcat output may contain sensitive data; the routes are loopback-only.
+- `adb shell` commands consume real device resources; confirm destructive actions
+  (uninstall, clear data, force-stop) first.
+- Reading another app's memory or maps needs root or a debuggable app.
+
+---
+
+## 📁 Files
+
+| Path | Purpose |
+| :--- | :--- |
+| `lib/index.js` | host half: adb engine, device polling, logcat subprocess, scrcpy video + control, HTTP routes, WebSocket, 30 agent tools |
+| `lib/client.js` | browser half: sidebar entry + right-hand drawer (React, no build step), four tabs |
+| `lib/scrcpy-server.js` | vendored official scrcpy-server v3.3.1 (base64) |
+| `cordis.patch.yml` | profile bundle patch (applied automatically) |
+| `tools/scrcpy-server/fetch-server.mjs` | re-fetches the vendored server |
+| `docs/images/` | README screenshots |
+
+---
+
+## 📄 License
+
+[MIT License](LICENSE).
