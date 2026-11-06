@@ -30,10 +30,10 @@ DSH Web GUI 的安卓实机调试面板（类似 Android Studio 的 Logcat 视�
     server 自己持有 `MediaCodec`，因此**没有 `screenrecord` 的 180 秒录制上限、不会每 3 分钟断流**，
     画面静止时靠 `KEY_REPEAT_PREVIOUS_FRAME_AFTER` 补帧而不是停帧；转屏由 server 重置编码会话；
     **实测：动态画面 33 fps / 172 KB/s 持续稳定**，静态画面按需降帧（这是设计行为，非缺陷）；
-    分辨率档位可选（360x800 / 540x1200 / 720x1600 / 1080x2400），流畅（视频）/ 高清（PNG）双模式；
-    **自动跟随设备旋转** —— 横屏时流尺寸自动交换为 1200x540，画面满屏无黑边，触控坐标同步换算到当前方向；
-    **操控低延迟** —— 内置长驻手势注入器（`app_process` + 内嵌 dex，首次自动部署），点击/按键注入仅 **3~5ms**
-    （原生 `input` 命令每次都要启动一个 Java VM，实测约 480ms）；注入器不可用时自动回退到 `input`，不影响可用性；
+    分辨率档位**按设备真实面板自动生成**（原生 / 75% / 50% / 37.5% / 25%，码率随像素数推算），流畅（视频）/ 高清（PNG）双模式；
+    **自动跟随设备旋转** —— 横屏时流尺寸自动交换，画面满屏无黑边，触控坐标同步换算到当前方向；
+    **操控低延迟** —— 输入走 **scrcpy 的 control 通道**（`InputManager.injectInputEvent`，长连接单次写入），
+    实测点击 **2~3ms**；没开投屏时自动回退到原生 `input` 命令（每次启动一个 Java VM，约 730ms）；
     **在电脑上直接操控手机**：点击=点按、拖动=滑动、**滚轮=上下滑动**、**右键=返回键**、**长按=长按**、**双击=双击**、
     **实体键盘直接打字**（字母/数字/符号直通手机，Enter/Backspace/Esc/方向键/Tab 映射为对应按键）、
     文字输入框（支持中文 IME）、快捷按键（Home/返回/唤醒/音量）、一键下载当前帧、⛶ 全屏
@@ -81,10 +81,10 @@ DSH Web GUI 的安卓实机调试面板（类似 Android Studio 的 Logcat 视�
   默认 64MB/分卷、保留 14 天、512MB/设备；可用环境变量覆盖：`DSH_LOGCAT_DAY_MB`、
   `DSH_LOGCAT_RETAIN_DAYS`、`DSH_LOGCAT_MAX_MB`，`DSH_LOGCAT_PERSIST=off` 完全关闭落盘
   （实时流、`logcat_recent`、`logcat_crash` 不受影响）。崩溃快照存 `~/.dsh/logcat/crashes/<serial>/<时间戳>-<FATAL|ANR>/`
-  （`screenshot.png` + `crash.log` + `meta.json`）；注入器辅助进程（`app_process` 下运行的 `dsh.Injector`）自身的崩溃不会写入快照。
-- **手势注入器**：`tap/swipe/keyevent` 默认走常驻注入器（单次几毫秒），部署时对 dex 显式 `chmod 600`
-  （Android 14+ 的 `app_process` 拒绝加载全局可写 dex）；连续 3 次启动失败自动停用并回落原生命令，
-  设备重新上线后自动恢复尝试。
+  （`screenshot.png` + `crash.log` + `meta.json`）。
+- **输入注入**：`tap/swipe/keyevent` 走 scrcpy control 通道（长连接，单次几毫秒）；
+  未开投屏时回退原生 `input` 命令。**不再内置自研注入器**——它在 Android 15 上会被系统
+  `Killed`（`app_process` 加载可执行 dex 受限），scrcpy control 通道已覆盖该用途。
 
 ## 安装
 
