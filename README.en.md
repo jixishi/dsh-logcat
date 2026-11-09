@@ -3,7 +3,7 @@
 [![Cordis](https://img.shields.io/badge/Cordis-Plugin-blue.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![scrcpy](https://img.shields.io/badge/scrcpy-server-v3.3.1-green.svg)](https://github.com/Genymobile/scrcpy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.9.2-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-0.9.3-blue.svg)]()
 
 `dsh-logcat` is an **on-device Android debugging and reverse-engineering workbench** built
 for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web GUI.
