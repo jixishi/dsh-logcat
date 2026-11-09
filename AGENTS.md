@@ -5,17 +5,19 @@ release tooling; it must never contain secret values.
 
 ## Release & credentials
 
-- Credentials come from the environment (portable DSH launcher injects them) or can be loaded
-  on demand: `. "$env:DSH_HOME\env\load-secrets.ps1"`. **Never ask the user for tokens and never
-  commit them.**
+- Credentials come from the environment (the portable DSH launcher injects them). **Never ask the
+  user for tokens and never commit them.**
 - The secrets file (`<portable>\data\portable-secrets.env`) is part of the portable tree and
   travels with it. Copy the **whole folder**, not just `data\dsh-home`; never hard-code a drive
-  letter — the launcher and loader both resolve by their own location.
-- Publish with the scripts — they auto-load credentials when the variables are absent:
-  - `./publish-npm.ps1` → npmjs.org (`latest`, primary channel)
-  - `./publish-github-packages.ps1` → GitHub Packages (mirror, `latest` only)
+  letter — the launcher resolves by its own location.
+- Publish with plain npm commands (there are no in-repo publish scripts):
+  - `npm publish --registry=https://registry.npmjs.org` → npmjs.org (`latest`, primary channel;
+    needs `$env:NPM_TOKEN`, a bypass-2FA automation token)
+  - `npm publish --registry=https://npm.pkg.github.com --tag latest` → GitHub Packages (mirror;
+    needs `$env:NODE_AUTH_TOKEN` with `write:packages`)
 - GitHub is unreachable directly from this machine: use the local proxy
-  (`git -c http.proxy=http://127.0.0.1:7890 push ...`, `curl -x http://127.0.0.1:7890 ...`).
+  (`git -c http.proxy=http://127.0.0.1:3067 push ...`, `curl -x http://127.0.0.1:3067 ...`).
+  The port in this file used to say `7890`, which is not listening on this host.
 - One GitHub Release + tag per stable version, always with the **full 40-char SHA** (short SHAs
   are rejected with 422). npm may report "being processed" for a few minutes after publish.
 - Bump versions by editing `package.json` as text — PowerShell JSON writes add a BOM that breaks

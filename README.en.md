@@ -13,16 +13,39 @@ browsing, and a process/memory reverse-engineering workbench — and exposes the
 capabilities to the model as **30 agent tools**, so an agent can deploy an APK, watch the
 log, catch crashes and drive the UI itself.
 
-> **Current version: 0.9.1.** This release rebuilds the status strip into **six metric
-> cards** (device / CPU / MEM / disk / network / battery), adds **disk usage** and **live
-> network throughput**, and fixes a blank-panel render crash, a shifted network counter
-> parse, and misaligned card titles.
+> **Current version: 0.9.3.** This release adds **scan-to-pair** for wireless debugging (the
+> QR code follows the AOSP spec, so one scan connects the phone), drops the version badge
+> from the header, and adds a **floating / push** choice for the panel plus a toggle for the
+> metric cards.
 >
 > **Compatibility**: targets DSH **0.2.1-rc.5**, Node.js ≥ 22.19.
 > Uses the DSH 0.2 `sidebar.panellist` / `main` panel seats and the
 > `window.__ModuleLoader__.load({id, factory})` client bundle format.
 
-## 🆕 0.9.1 highlights
+## 🆕 0.9.3 highlights
+
+### 0.9.3 — scan-to-pair for wireless debugging
+
+- **Scan to pair**: the WiFi sheet gained a **scan to pair** tab — the host draws a QR code
+  and the phone connects by scanning it. The payload follows AOSP's `AdbQrCode.java`
+  (`WIFI:T:ADB;S:studio-…;P:…;;`); the `S:` value carries the mDNS instance name, which
+  lets the host pick out its own phone among several in pairing mode.
+- **The pairing secret goes in on stdin**, so it never appears in the process list.
+- **Pairing is not connecting**: pairing only establishes trust; the transport is a different
+  port. After a successful pair the host finds `_adb-tls-connect._tcp` on the same host and
+  connects.
+- **A failed discovery falls back to manual entry**: when mDNS is blocked (AP isolation, VPN)
+  the sheet switches to the manual tab rather than leaving an unscannable code on screen.
+- **QR encoding is delegated to `qrcode-generator`** (zero dependencies) rather than a
+  hand-rolled encoder.
+- Sessions are single-use, in memory only, and expire after 120 s.
+
+### 0.9.2
+
+- **Version badge dropped from the header**: the build number is diagnostic information, not
+  something you act on while reading logs. The status bar still reports the plugin version.
+
+### 0.9.1
 
 - **Six metric cards**: the strip is now a responsive card grid — device / CPU / MEM /
   disk / network / battery — one row wide, collapsing to 3 / 2 / 1 columns by **container
@@ -220,15 +243,6 @@ credentials. Two caveats:
 ```ini
 # ~/.npmrc
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
-```
-
-Maintainer publishing (both scripts read credentials automatically — from the environment
-when present, otherwise by dot-sourcing the portable loader
-`$env:DSH_HOME\env\load-secrets.ps1`; secrets only ever enter the process environment):
-
-```powershell
-./publish-npm.ps1                 # → npmjs.org (primary, needs NPM_TOKEN)
-./publish-github-packages.ps1     # → GitHub Packages (needs GH_TOKEN: write:packages)
 ```
 
 ---
