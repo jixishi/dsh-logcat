@@ -3,7 +3,7 @@
 [![Cordis](https://img.shields.io/badge/Cordis-Plugin-blue.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![scrcpy](https://img.shields.io/badge/scrcpy-server-v3.3.1-green.svg)](https://github.com/Genymobile/scrcpy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.9.1-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-0.9.2-blue.svg)]()
 
 `dsh-logcat` 是针对 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 深度定制的**安卓实机调试与逆向工作台**。
 
