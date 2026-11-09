@@ -48,7 +48,12 @@
 - 🔬 **逆向工作台**（`逆向` tab）：进程列表 → **自动加载模块地图**（so 名/基址/权限，点基址直接转储）→ 内存 hex/字符串搜索 → 匹配地址转储 → 手动地址+长度转储，转储视图 **hex + ASCII 双列**；配套 `frida_server` 部署与 `frida_script` 模板生成。
 - 💥 **崩溃自动快照**：流中出现 `FATAL EXCEPTION` / `ANR` 时自动截图 + 150 行上下文落盘 `~/.dsh/logcat/crashes/<serial>/<时间戳>-<FATAL|ANR>/`（`screenshot.png` + `crash.log` + `meta.json`），面板弹提示条，随时在「崩溃」弹窗查看历史快照。
 - 🕘 **历史回溯**：日志按设备按天落盘，重启 GUI 不丢；面板按钮从磁盘加载历史并与实时缓冲**按时间戳去重合并**。
-- 📶 **WiFi 无线调试**：输入 IP/端口/配对码，自动 `adb pair` + `adb connect`，摆脱数据线（Android 11+）。
+- 📶 **WiFi 无线调试**（Android 11+）：**扫码配对**或**手动输入**两种方式，摆脱数据线。
+  - **扫码配对**：电脑生成二维码，手机「设置 → 开发者选项 → 无线调试 → 使用二维码配对设备」一扫即连。二维码内容按 AOSP `AdbQrCode.java` 规范生成（`WIFI:T:ADB;S:studio-…;P:…;;`），`S:` 携带的 mDNS 实例名用于在同一网络的多台设备中精确匹配自己那台。
+  - **配对码走 stdin**，不出现在进程列表里（`adb pair` 从 stdin 读取）。
+  - **配对 ≠ 可连接**：配对只建立信任，实际连接使用另一个端口，配对成功后自动查找同主机上的 `_adb-tls-connect._tcp` 并连接。
+  - **发现失败自动退回手动输入**：若 mDNS 被拦截（AP 隔离 / VPN），界面切到手动 tab，而不是留一个扫不动的码在屏幕上。
+  - 会话一次性、仅存内存、120 秒过期。
 - 📦 **APK 直装 / 截图 / 导出**：本地选 APK 流式上传安装（1GB 上限）；一键截屏下载 PNG；日志暂停/继续/清空/复制/导出 `.txt`。
 - 🧩 **面板形态**：默认**右侧抽屉**（浮在对话之上，看一眼日志不必切布局），**宽度可拖拽并记忆**；想要常驻面板时在浏览器控制台执行 `window.__DSH_LOGCAT_NATIVE_PANEL__ = true` 后刷新，改用官方 `main` + `sidebar.panellist` 挂载。
 - 🎨 **设计语言**：宿主 `--dsw-*` 设计 token 优先，单一强调色，内置 SVG 图标集（不依赖图标包、不用 emoji），日志行等宽字体 + `tabular-nums`。
@@ -68,10 +73,15 @@
 | <img src="docs/images/screen-landscape.png" width="420" alt="投屏横屏" /> | <img src="docs/images/file-browser.png" width="420" alt="文件浏览" /> |
 | **转屏后流尺寸交换为 3168x1440，满屏无黑边** | **权限列常显、面包屑、下载/删除、多选** |
 
-| 5. 窄面板响应式折叠 |
+| 5. 窄面板响应式折叠 | 6. 无线调试扫码配对 |
+| :---: | :---: |
+| <img src="docs/images/narrow-panel.png" width="300" alt="窄面板" /> | <img src="docs/images/qr-pairing.png" width="380" alt="扫码配对" /> |
+| **容器查询按面板宽度折成两列，标题基线仍对齐** | **扫码 / 手动 两个 tab，手机一扫即连** |
+
+| 7. 配对成功后无线设备自动进入列表 |
 | :---: |
-| <img src="docs/images/narrow-panel.png" width="300" alt="窄面板" /> |
-| **容器查询按面板宽度折成两列，标题基线仍对齐** |
+| <img src="docs/images/wifi-connected.png" width="480" alt="无线设备已连接" /> |
+| **`_adb-tls-connect._tcp` 由 mDNS 自动发现，无需手填 IP:端口** |
 
 ---
 
@@ -89,6 +99,11 @@ Android 设备 (adb / USB 或 WiFi)
   │                                  │
   ├─ adb shell（stats / 文件 / 逆向）┤  collectStats（一次往返取全部指标）
   │                                  │  listRemoteDir（ls -la → 权限/大小/时间）
+  │                                  │
+  ├─ 扫码配对 ──────────────────────┤  lib/qr.js → qrcode-generator
+  │    手机扫描 WIFI:T:ADB;S:…;P:…;;  │  buildPairingPayload（一次性凭据）
+  │    手机广播 _adb-tls-pairing._tcp │  轮询 mDNS，按 S: 精确匹配
+  │    adb pair <host>:<port> ◀ stdin  │  配对码走 stdin，不进进程列表
   │                                  ▼
   │                          HTTP 路由 /api/dsh-logcat/*
   │                          WebSocket /api/dsh-logcat/stream
@@ -99,6 +114,7 @@ Android 设备 (adb / USB 或 WiFi)
   │                                 侧栏入口 + 右侧抽屉
   │                                 日志 / 屏幕 / 逆向 / 文件 四个 tab
   │                                 六卡指标（容器查询响应式）
+  │                                 WiFi 弹窗：扫码 / 手动 两个 tab
   │
   └─ ctx.tools ──▶ 30 个 Agent 工具（logcat_* / adb_* / input_* / proc_* / mem_* / frida_*）
 ```
@@ -160,6 +176,7 @@ dsh plugin --profile web add link:<本目录绝对路径>
 | 依赖 | 解析方式 |
 |---|---|
 | `ws` | 本目录 `node_modules` 下的 junction，真实安装在 `.pnpm` 里 |
+| `qrcode-generator` | 同上（零依赖，用于生成扫码配对二维码） |
 | `react` / `react-dom` | 同上（浏览器端由宿主注入，单例） |
 | `@deepseek-ai/dsh-tools` | **必须**写进 `package.json` 的 `peerDependencies`，由宿主代解析 |
 
@@ -265,7 +282,10 @@ imported from .../lib/index.js
 | `GET` | `/api/dsh-logcat/crashes` · `/crash-file` | 崩溃快照列表 / 读取 |
 | `POST` | `/api/dsh-logcat/install-apk` | 上传安装 APK |
 | `POST` | `/api/dsh-logcat/install-adb` | 一键安装 adb |
-| `POST` | `/api/dsh-logcat/wifi-connect` · `/wifi-disconnect` | 无线调试 |
+| `POST` | `/api/dsh-logcat/wifi-connect` · `/wifi-disconnect` | 无线调试（手动配对 / 断开） |
+| `GET` | `/api/dsh-logcat/wifi-qr` | 生成扫码配对会话（二维码 SVG + 一次性凭据） |
+| `GET` | `/api/dsh-logcat/wifi-qr-poll` | 轮询 mDNS 广播并完成 `adb pair` |
+| `POST` | `/api/dsh-logcat/wifi-qr-cancel` | 放弃当前二维码会话 |
 | `GET` | `/api/dsh-logcat/files` | 列出设备目录（含权限） |
 | `GET` | `/api/dsh-logcat/file-get` | 下载文件（≤256MB 流式） |
 | `POST` | `/api/dsh-logcat/file-rm` | 删除文件 / 目录 |
@@ -330,6 +350,14 @@ node .tmp/check-stats-parse.mjs       # 指标解析（用真机输出做断言�
 7. **`adb devices` 里设备是 `unauthorized`？**
    - 需要在手机上点「允许 USB 调试」。面板会明确提示。
 
+8. **扫码配对一直停在「请用手机扫描二维码…」？**
+   - 说明主机没收到手机广播的 `_adb-tls-pairing._tcp`。常见原因与对策：
+     - **AP 隔离** —— 同一 Wi-Fi 下客户端之间不通 multicast，换网络或用手动输入。
+     - **手机没进配对模式** —— 必须点「无线调试 → 使用二维码配对设备」，只是开着「无线调试」不会广播配对服务。
+     - **电脑走了 VPN / 代理网卡** —— mDNS 多播被路由到错误的网卡。可临时关掉 VPN 再试。
+   - 发现失败时界面会提示并切到「手动输入」tab，可以直接用手机「无线调试」页面显示的
+     IP:端口 + 配对码完成同样的流程。
+
 ---
 
 ## ⚠️ 限制
@@ -345,8 +373,9 @@ node .tmp/check-stats-parse.mjs       # 指标解析（用真机输出做断言�
 
 | 路径 | 说明 |
 | :--- | :--- |
-| `lib/index.js` | 宿主端：adb 引擎、设备轮询、logcat 子进程、scrcpy 流与控制通道、HTTP 路由、WebSocket、30 个 agent 工具 |
+| `lib/index.js` | 宿主端：adb 引擎、设备轮询、logcat 子进程、scrcpy 流与控制通道、HTTP 路由、WebSocket、扫码配对、30 个 agent 工具 |
 | `lib/client.js` | 浏览器端：侧栏入口 + 右侧抽屉（React，无构建步骤），四个 tab |
+| `lib/qr.js` | 扫码配对：ADB 配对负载生成 + 二维码 SVG 渲染（基于 `qrcode-generator`） |
 | `lib/scrcpy-server.js` | 内嵌的官方 scrcpy-server v3.3.1（base64，随插件分发） |
 | `cordis.patch.yml` | profile bundle patch（自动应用） |
 | `tools/scrcpy-server/fetch-server.mjs` | 重新拉取内嵌 scrcpy-server 的脚本 |

@@ -98,8 +98,19 @@ log, catch crashes and drive the UI itself.
   `meta.json`); the panel shows a banner and keeps the history browsable.
 - 🕘 **History**: logs roll to disk per device per day, so a GUI restart loses nothing; the
   panel merges the disk tail with the live buffer, de-duplicated by timestamp.
-- 📶 **Wireless debugging**: IP / port / pairing code drives `adb pair` + `adb connect`
-  (Android 11+).
+- 📶 **Wireless debugging** (Android 11+): pair by **scanning a QR code** or by **typing the
+  details by hand** — either way, no cable.
+  - **Scan to pair**: the host draws a QR code; on the phone, open *Settings → Developer
+    options → Wireless debugging → Pair device with QR code* and scan it. The payload follows
+    AOSP's `AdbQrCode.java` (`WIFI:T:ADB;S:studio-…;P:…;;`); the `S:` value is the mDNS
+    instance name, which lets the host pick out its own phone among several in pairing mode.
+  - **The pairing secret goes in on stdin**, so it never shows up in the process list.
+  - **Pairing is not connecting**: pairing only establishes trust, and the transport lives on
+    a different port. After a successful pair the host looks for `_adb-tls-connect._tcp` on the
+    same host and connects.
+  - **A failed discovery falls back to manual entry**: if mDNS is blocked (AP isolation, VPN)
+    the sheet switches to the manual tab rather than leaving an unscannable code on screen.
+  - Sessions are single-use, in memory only, and expire after 120 s.
 - 📦 **APK install, screenshots, export**: stream-installs a local APK (1 GB cap),
   captures the screen to PNG, and pause/resume/clear/copy/export the log view.
 - 🧩 **Panel shape**: a **right-hand drawer** by default (overlays the conversation, so a
@@ -127,10 +138,15 @@ log, catch crashes and drive the UI itself.
 | <img src="docs/images/screen-landscape.png" width="420" alt="Landscape casting" /> | <img src="docs/images/file-browser.png" width="420" alt="File browser" /> |
 | **Stream swaps to 3168x1440, full frame, no letterbox** | **Permissions column, breadcrumbs, download/delete, multi-select** |
 
-| 5. Narrow panel collapses responsively |
+| 5. Narrow panel collapses responsively | 6. QR scan-to-pair for wireless debugging |
+| :---: | :---: |
+| <img src="docs/images/narrow-panel.png" width="300" alt="Narrow panel" /> | <img src="docs/images/qr-pairing.png" width="380" alt="QR pairing" /> |
+| **Container query folds to two columns, title baselines still aligned** | **Scan / manual tabs — one scan connects the phone** |
+
+| 7. The paired wireless device shows up in the device list on its own |
 | :---: |
-| <img src="docs/images/narrow-panel.png" width="300" alt="Narrow panel" /> |
-| **Container query folds to two columns, title baselines still aligned** |
+| <img src="docs/images/wifi-connected.png" width="480" alt="Wireless device connected" /> |
+| **`_adb-tls-connect._tcp` is discovered over mDNS — no IP:port to type in** |
 
 ---
 
@@ -222,6 +238,7 @@ when present, otherwise by dot-sourcing the portable loader
 | Dependency | How it resolves |
 |---|---|
 | `ws` | junction in this directory's `node_modules`, installed under `.pnpm` |
+| `qrcode-generator` | same (zero-dependency; renders the pairing QR code) |
 | `react` / `react-dom` | same (the host injects them on the browser side, as singletons) |
 | `@deepseek-ai/dsh-tools` | **must** be declared in `package.json` `peerDependencies`, resolved by the host |
 
@@ -329,7 +346,10 @@ instrument.
 | `GET` | `/api/dsh-logcat/crashes` · `/crash-file` | crash snapshot list / read |
 | `POST` | `/api/dsh-logcat/install-apk` | upload and install an APK |
 | `POST` | `/api/dsh-logcat/install-adb` | install adb |
-| `POST` | `/api/dsh-logcat/wifi-connect` · `/wifi-disconnect` | wireless debugging |
+| `POST` | `/api/dsh-logcat/wifi-connect` · `/wifi-disconnect` | wireless debugging (manual pair / disconnect) |
+| `GET` | `/api/dsh-logcat/wifi-qr` | start a scan-to-pair session (QR SVG + one-time credentials) |
+| `GET` | `/api/dsh-logcat/wifi-qr-poll` | poll the mDNS announcement and run `adb pair` |
+| `POST` | `/api/dsh-logcat/wifi-qr-cancel` | abandon the current QR session |
 | `GET` | `/api/dsh-logcat/files` | list a device directory (with permissions) |
 | `GET` | `/api/dsh-logcat/file-get` | download a file (streamed, ≤256 MB) |
 | `POST` | `/api/dsh-logcat/file-rm` | delete a file or directory |
@@ -399,6 +419,18 @@ node .tmp/check-stats-parse.mjs       # metric parsing, asserted against real de
 7. **The device shows as `unauthorized` in `adb devices`.**
    - Tap "Allow USB debugging" on the phone; the panel says so explicitly.
 
+8. **Scan-to-pair sits at "please scan the QR code" forever.**
+   - The host never received the phone's `_adb-tls-pairing._tcp` announcement. Usual causes:
+     - **AP isolation** — clients on the same Wi-Fi cannot multicast to each other. Try a
+       different network, or use manual entry.
+     - **The phone is not in pairing mode** — you must actually open *Wireless debugging →
+       Pair device with QR code*. Merely having wireless debugging on does not broadcast a
+       pairing service.
+     - **The host is behind a VPN or proxy adapter** — mDNS multicast gets routed down the
+       wrong interface. Turn the VPN off and retry.
+   - When discovery fails the sheet says so and switches to the **manual entry** tab, where
+     you can use the IP:port and pairing code shown on the phone's wireless debugging page.
+
 ---
 
 ## ⚠️ Limitations
@@ -415,8 +447,9 @@ node .tmp/check-stats-parse.mjs       # metric parsing, asserted against real de
 
 | Path | Purpose |
 | :--- | :--- |
-| `lib/index.js` | host half: adb engine, device polling, logcat subprocess, scrcpy video + control, HTTP routes, WebSocket, 30 agent tools |
+| `lib/index.js` | host half: adb engine, device polling, logcat subprocess, scrcpy video + control, HTTP routes, WebSocket, scan-to-pair, 30 agent tools |
 | `lib/client.js` | browser half: sidebar entry + right-hand drawer (React, no build step), four tabs |
+| `lib/qr.js` | scan-to-pair: ADB pairing payload builder + QR SVG rendering (on `qrcode-generator`) |
 | `lib/scrcpy-server.js` | vendored official scrcpy-server v3.3.1 (base64) |
 | `cordis.patch.yml` | profile bundle patch (applied automatically) |
 | `tools/scrcpy-server/fetch-server.mjs` | re-fetches the vendored server |
