@@ -3,7 +3,7 @@
 [![Cordis](https://img.shields.io/badge/Cordis-Plugin-blue.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![scrcpy](https://img.shields.io/badge/scrcpy-server-v3.3.1-green.svg)](https://github.com/Genymobile/scrcpy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.9.3-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-0.9.4-blue.svg)]()
 
 `dsh-logcat` is an **on-device Android debugging and reverse-engineering workbench** built
 for the [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) Web GUI.
@@ -13,16 +13,45 @@ browsing, and a process/memory reverse-engineering workbench — and exposes the
 capabilities to the model as **30 agent tools**, so an agent can deploy an APK, watch the
 log, catch crashes and drive the UI itself.
 
-> **Current version: 0.9.3.** This release adds **scan-to-pair** for wireless debugging (the
-> QR code follows the AOSP spec, so one scan connects the phone), drops the version badge
-> from the header, and adds a **floating / push** choice for the panel plus a toggle for the
-> metric cards.
+> **Current version: 0.9.4.** This release fixes three things: **the QR code now renders on
+> machines without adb** (drawing a code never needed it — adb is only required to run
+> `adb pair`), **the panel re-reads its version from disk when it opens**, so an in-place
+> upgrade no longer shows a stale number until the GUI restarts, and **adb discovery now
+> works on Linux and macOS**, not just Windows.
 >
 > **Compatibility**: targets DSH **0.2.1-rc.5**, Node.js ≥ 22.19.
 > Uses the DSH 0.2 `sidebar.panellist` / `main` panel seats and the
 > `window.__ModuleLoader__.load({id, factory})` client bundle format.
 
-## 🆕 0.9.3 highlights
+## 🆕 0.9.4 highlights
+
+### 0.9.4 — QR works without adb, version refreshes live
+
+- **Fixed: no QR on machines without adb.** `/wifi-qr` guarded on `engine.adb === null` and
+  returned 500 when platform-tools were missing, which the panel showed as a generic network
+  error. Drawing a QR is a pure JS render and never touches adb, so the guard was in the
+  wrong place. The requirement moved to `/wifi-qr-poll`, the handler that actually runs
+  `adb pair`.
+- **Actionable failure instead of a 500.** When adb is missing the poll returns a terminal
+  `state: "error"` telling you to install platform-tools or use manual entry, and clears the
+  session so the panel stops polling a state that cannot change.
+- **Fixed: version did not refresh after an upgrade.** `package.json` was read once at import,
+  so an in-place upgrade kept reporting the boot version (plugin manager 0.9.3, status bar
+  0.9.2). The panel now re-reads it by file mtime, so opening the panel shows the real
+  version without a restart.
+- **Removed a misleading message.** The client claimed "switched to manual entry" on every
+  failure without actually switching tabs; it now shows the server's reason as-is.
+- **Fixed: adb discovery was Windows-only.** It only probed the Windows
+  `%LOCALAPPDATA%\Android\Sdk`; Linux and macOS fell back to PATH alone, and a GUI launched
+  from a desktop icon often gets a minimal PATH. Standard locations are now probed per
+  platform:
+  - **Windows**: `%ANDROID_HOME%` / `%LOCALAPPDATA%\Android\Sdk`
+  - **macOS**: `~/Library/Android/sdk`, Homebrew's `/opt/homebrew/bin`, `/usr/local/bin`
+  - **Linux**: `~/Android/Sdk`, `/usr/bin`, `/snap/bin`, `/usr/lib/android-sdk/platform-tools`
+  - every platform also scans the PATH directories and keeps the plugin-managed `~/.dsh/adb`
+- **Fixed: one-click adb install could land non-executable on Linux.** It now sets `chmod
+  755` after extraction (a ZIP does not always preserve the exec bit) and falls back to
+  `python3 -m zipfile` when `unzip` is unavailable.
 
 ### 0.9.3 — scan-to-pair for wireless debugging
 

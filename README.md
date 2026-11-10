@@ -3,18 +3,31 @@
 [![Cordis](https://img.shields.io/badge/Cordis-Plugin-blue.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![scrcpy](https://img.shields.io/badge/scrcpy-server-v3.3.1-green.svg)](https://github.com/Genymobile/scrcpy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.9.3-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-0.9.4-blue.svg)]()
 
 `dsh-logcat` 是针对 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 深度定制的**安卓实机调试与逆向工作台**。
 
 通过本插件，你可以在 DSH Web GUI 里直接完成**实时日志查看、真机投屏与电脑操控、设备文件浏览、进程/内存逆向分析**，并把同一套能力以 **30 个 Agent 工具**开放给模型 —— 构建安卓应用时，模型可以自己部署 APK、看日志、抓崩溃、做界面自动化，形成闭环。
 
-> **当前插件版本：0.9.3**。本次更新：无线调试新增**扫码配对**（二维码按 AOSP 规范生成，手机一扫即连），头部去掉版本号徽章；面板显示模式可在**悬浮 / 推挤**之间切换，指标卡片可折叠。
+> **当前插件版本：0.9.4**。本次修复：**没装 adb 的机器也能生成二维码**（扫码接口不再依赖 adb，adb 只在真正执行配对时才需要）；面板打开时**重新读取磁盘上的版本号**，升级后不必重启 GUI；**adb 定位支持 Linux / macOS**，不再只认 Windows。
 >
 > **兼容性**：面向 **DSH 0.2.1-rc.5**，Node.js ≥ 22.19。
 > 已适配 DSH 0.2 的 `sidebar.panellist` / `main` 面板挂载与其客户端 bundle 格式（`window.__ModuleLoader__.load({id, factory})`）。
 
-## 🆕 0.9.3 更新摘要
+## 🆕 0.9.4 更新摘要
+
+### 0.9.4 — 二维码不再依赖 adb，版本号实时刷新
+
+- **修复：没装 adb 的机器不能生成二维码**。`/wifi-qr` 原本有一道 `engine.adb === null` 的检查，没有 platform-tools 就直接返回 500，面板只显示一个笼统的网络错误。生成二维码是纯 JS 渲染，根本不需要 adb —— 这道检查已移除，adb 只在真正执行 `adb pair` 的轮询接口里校验。
+- **配对失败提示可操作**：adb 缺失时返回明确文案（装 platform-tools，或改用「手动输入」），而不是抛 500；同时清掉会话，避免面板对着一个不会变化的状态反复轮询。
+- **修复：升级后版本号不刷新**。`package.json` 的版本在模块加载时读一次就固定了，插件原地升级后进程仍显示旧版本（插件管理器 0.9.3、状态栏 0.9.2）。现在面板打开时会按文件 mtime 重新读取，升级后无需重启即可显示正确版本。
+- **修正误导文案**：客户端失败时会说「已切换到手动输入」，但并没有真的切换。该文案已删除，改为照实显示服务端返回的原因。
+- **修复：adb 定位不再只认 Windows**。原先只探测 Windows 的 `%LOCALAPPDATA%\Android\Sdk`，Linux/macOS 只能靠 PATH 兜底，而 GUI 从桌面图标启动时 PATH 往往不完整。现在按平台探测标准位置：
+  - **Windows**：`%ANDROID_HOME%` / `%LOCALAPPDATA%\Android\Sdk`
+  - **macOS**：`~/Library/Android/sdk`、Homebrew 的 `/opt/homebrew/bin`、`/usr/local/bin`
+  - **Linux**：`~/Android/Sdk`、`/usr/bin`、`/snap/bin`、`/usr/lib/android-sdk/platform-tools`
+  - 三平台都会逐个扫描 PATH 目录，并保留插件一键安装目录 `~/.dsh/adb`
+- **修复：一键安装 adb 在 Linux 上可能不可执行**。解压后补 `chmod 755`（ZIP 不一定保留执行位）；`unzip` 不可用时回退到 `python3 -m zipfile`。
 
 ### 0.9.3 — 无线调试扫码配对
 
